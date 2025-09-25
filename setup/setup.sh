@@ -6,6 +6,11 @@ NC='\033[0m' # No Color
 
 echo -e "${GREEN}--- Spark Autotuning Demo Setup ---${NC}"
 
+# --- Robust Path Detection ---
+# Get the absolute path of the directory where this script is located.
+# This makes the script runnable from any location.
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 # Prompt for user configuration
 read -p "Enter your GCP Project ID: " GCLOUD_PROJECT
 read -p "Enter your GCP Region (e.g., us-central1): " GCLOUD_REGION
@@ -47,8 +52,8 @@ echo "This will create the table using only Jan 2023 data."
 # Create a unique ID for the batch job
 BATCH_ID="iceberg-init-$(date +%s)"
 
-# Get the Python script from the parent directory
-CREATE_SCRIPT="../create_iceberg_table.py"
+# Define the path to the PySpark script using the robust SCRIPT_DIR
+CREATE_SCRIPT="$SCRIPT_DIR/create_iceberg_table.py"
 gsutil cp $CREATE_SCRIPT $GCS_BUCKET/code/
 
 gcloud dataproc batches submit pyspark \
