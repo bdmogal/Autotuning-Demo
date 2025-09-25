@@ -18,8 +18,11 @@ SPARK_CODE_PATH = f"gs://{GCS_BUCKET}/code/spark_jobs"
 ICEBERG_TABLE_PATH = f"gs://{GCS_BUCKET}/warehouse/taxis"
 ICEBERG_WAREHOUSE = f"gs://{GCS_BUCKET}/warehouse"
 PERFORMANCE_LOG_FILE = f"gs://{GCS_BUCKET}/logs/performance_log.csv"
-JARS = ["gs://spark-lib/iceberg/iceberg-spark-runtime-3.1_2.12-1.2.1.jar"]
-PYSPARK_JARS_CONFIG = {"spark.jars": ",".join(JARS)}
+
+# **UPDATED JAR PATH**
+# The setup.sh script now uploads the JAR to this location in your bucket.
+ICEBERG_JAR = f"gs://{GCS_BUCKET}/jars/iceberg-spark-runtime-3.1_2.12-1.2.1.jar"
+PYSPARK_JARS_CONFIG = {"spark.jars": ICEBERG_JAR}
 
 # Autotuning Config
 AUTOTUNE_CONFIG = {
@@ -35,17 +38,17 @@ def get_job_metrics(**context):
     
     # Retrieve the batch IDs saved via XComs
     batch_ids = {
-        "job_a_joins": ti.xcom_pull(task_ids="run_spark_job_a_joins", key="batch_id"),
-        "job_b_scaling": ti.xcom_pull(task_ids="run_spark_job_b_scaling", key="batch_id"),
-        "job_c_skew": ti.xcom_pull(task_ids="run_spark_job_c_skew", key="batch_id"),
-        "job_d_memory": ti.xcom_pull(task_ids="run_spark_job_d_memory", key="batch_id"),
+        "job_a_joins": json.loads(ti.xcom_pull(task_ids="run_spark_job_a_joins", key="return_value"))["name"].split("/")[-1],
+        "job_b_scaling": json.loads(ti.xcom_pull(task_ids="run_spark_job_b_scaling", key="return_value"))["name"].split("/")[-1],
+        "job_c_skew": json.loads(ti.xcom_pull(task_ids="run_spark_job_c_skew", key="return_value"))["name"].split("/")[-1],
+        "job_d_memory": json.loads(ti.xcom_pull(task_ids="run_spark_job_d_memory", key="return_value"))["name"].split("/")[-1],
     }
 
     client = dataproc_v1.BatchControllerClient(
         client_options={"api_endpoint": f"{GCP_REGION}-dataproc.googleapis.com:443"}
     )
     storage_client = storage.Client()
-    bucket = storage_client.bucket(GCS_BUCKET.replace("gs://", ""))
+    bucket = storage_client.bucket(GCS_BUCKET)
     blob = bucket.blob(PERFORMANCE_LOG_FILE.replace(f"gs://{GCS_BUCKET}/", ""))
 
     log_lines = "run_id,job_type,batch_id,duration_seconds,total_dcu_hours\n"
@@ -58,9 +61,12 @@ def get_job_metrics(**context):
         request = dataproc_v1.GetBatchRequest(name=f"projects/{GCP_PROJECT_ID}/locations/{GCP_REGION}/batches/{batch_id}")
         batch = client.get_batch(request=request)
         
-        start_time = batch.state_time
-        end_time = batch.runtime_info.endpoints["Spark History Server"] # A proxy for end time
-        duration = (end_time - start_time).total_seconds() if end_time and start_time else 0
+        # Calculate duration more reliably
+        if batch.state_time and batch.runtime_info.approximate_usage.milli_dcu_seconds:
+            duration = batch.runtime_info.approximate_usage.milli_dcu_seconds / 1000
+        else:
+            duration = 0
+
         dcu_hours = batch.runtime_info.usage_metrics.total_dcu_hours if batch.runtime_info.usage_metrics else 0
         
         log_lines += f"{run_id},{job_type},{batch_id},{duration},{dcu_hours}\n"
@@ -95,8 +101,6 @@ with DAG(
     )
 
     # --- Feature Engineering Jobs ---
-    # Each job will run after the data simulation is complete.
-    # We capture the batch_id to fetch metrics later.
 
     def create_spark_job_operator(task_id, job_script, job_type_arg):
         return DataprocSubmitPySparkBatchOperator(
@@ -111,8 +115,6 @@ with DAG(
                 f"--lookup_path=gs://{GCS_BUCKET}/data/raw/taxi_zone_lookup.csv",
             ],
             batch_config=AUTOTUNE_CONFIG,
-            # Use XComs to push the batch_id for the logging task
-            deferrable=False,  # Set to False to ensure xcom is pushed
             do_xcom_push=True,
         )
 
@@ -125,7 +127,6 @@ with DAG(
     log_performance_metrics = PythonOperator(
         task_id="log_performance_metrics",
         python_callable=get_job_metrics,
-        provide_context=True,
     )
     
     # Define DAG dependencies

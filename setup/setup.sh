@@ -4,12 +4,10 @@
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}--- Spark Autotuning Demo Setup ---${NC}"
-
 # --- Robust Path Detection ---
-# Get the absolute path of the directory where this script is located.
-# This makes the script runnable from any location.
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+echo -e "${GREEN}--- Dataproc Autotuning Demo Setup ---${NC}"
 
 # Prompt for user configuration
 read -p "Enter your GCP Project ID: " GCLOUD_PROJECT
@@ -25,44 +23,50 @@ echo "Project: $GCLOUD_PROJECT"
 echo "Region: $GCLOUD_REGION"
 echo "Bucket: $GCS_BUCKET"
 
-# Create a temporary data directory
-DATA_DIR="temp_data"
-mkdir -p $DATA_DIR
-cd $DATA_DIR
+# Create a temporary directory for downloads
+TEMP_DIR="temp_downloads"
+mkdir -p $TEMP_DIR
+cd $TEMP_DIR
+
+# --- JAR Download & Upload ---
+ICEBERG_JAR="iceberg-spark-runtime-3.1_2.12-1.2.1.jar"
+ICEBERG_JAR_URI="https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.1_2.12/1.2.1/$ICEBERG_JAR"
+ICEBERG_JAR_GCS_PATH="$GCS_BUCKET/jars/$ICEBERG_JAR"
+
+echo -e "\n${GREEN}Downloading Apache Iceberg JAR...${NC}"
+wget -q --show-progress "$ICEBERG_JAR_URI"
+
+echo -e "\n${GREEN}Uploading JAR to $ICEBERG_JAR_GCS_PATH...${NC}"
+gsutil cp "$ICEBERG_JAR" "$ICEBERG_JAR_GCS_PATH"
 
 # --- Data Download ---
 echo -e "\n${GREEN}Downloading NYC Taxi data (Jan, Feb, Mar 2023)...${NC}"
-wget https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet
-wget https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-02.parquet
-wget https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-03.parquet
+wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet
+wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-02.parquet
+wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-03.parquet
 
 echo -e "\n${GREEN}Downloading taxi zone lookup table...${NC}"
-wget https://d37ci6vzurychx.cloudfront.net/misc/taxi+_zone_lookup.csv -O taxi_zone_lookup.csv
+wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/misc/taxi+_zone_lookup.csv -O taxi_zone_lookup.csv
 
 # --- Data Upload to GCS ---
 echo -e "\n${GREEN}Uploading data to GCS bucket: $GCS_BUCKET...${NC}"
-gsutil mb -p $GCLOUD_PROJECT -l $GCLOUD_REGION $GCS_BUCKET || true # Fails gracefully if bucket exists
-gsutil cp *.parquet $GCS_BUCKET/data/raw/
-gsutil cp taxi_zone_lookup.csv $GCS_BUCKET/data/raw/
+gsutil mb -p $GCLOUD_PROJECT -l $GCLOUD_REGION $GCS_BUCKET >/dev/null 2>&1 || true
+gsutil cp *.parquet "$GCS_BUCKET/data/raw/"
+gsutil cp taxi_zone_lookup.csv "$GCS_BUCKET/data/raw/"
 
 # --- Initial Iceberg Table Creation ---
-echo -e "\n${GREEN}Submitting Spark job to create initial Iceberg table...${NC}"
-echo "This will create the table using only Jan 2023 data."
-
-# Create a unique ID for the batch job
+echo -e "\n${GREEN}Submitting Dataproc job to create initial Iceberg table...${NC}"
 BATCH_ID="iceberg-init-$(date +%s)"
-
-# Define the path to the PySpark script using the robust SCRIPT_DIR
 CREATE_SCRIPT="$SCRIPT_DIR/create_iceberg_table.py"
-gsutil cp $CREATE_SCRIPT $GCS_BUCKET/code/
+gsutil cp "$CREATE_SCRIPT" "$GCS_BUCKET/code/"
 
 gcloud dataproc batches submit pyspark \
-    $GCS_BUCKET/code/create_iceberg_table.py \
-    --batch=$BATCH_ID \
-    --project=$GCLOUD_PROJECT \
-    --region=$GCLOUD_REGION \
+    "$GCS_BUCKET/code/create_iceberg_table.py" \
+    --batch="$BATCH_ID" \
+    --project="$GCLOUD_PROJECT" \
+    --region="$GCLOUD_REGION" \
     --subnet=default \
-    --jars=gs://spark-lib/iceberg/iceberg-spark-runtime-3.1_2.12-1.2.1.jar \
+    --jars="$ICEBERG_JAR_GCS_PATH" \
     -- \
     --input_path="$GCS_BUCKET/data/raw/yellow_tripdata_2023-01.parquet" \
     --table_path="$GCS_BUCKET/warehouse/taxis"
@@ -70,7 +74,7 @@ gcloud dataproc batches submit pyspark \
 # --- Cleanup ---
 echo -e "\n${GREEN}Cleaning up local files...${NC}"
 cd ..
-rm -rf $DATA_DIR
+rm -rf $TEMP_DIR
 
 echo -e "\n${GREEN}--- Setup Complete! ---${NC}"
 echo "You can now proceed to configure and deploy the Airflow DAG."
