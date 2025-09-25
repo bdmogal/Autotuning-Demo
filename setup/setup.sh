@@ -23,29 +23,14 @@ echo "Project: $GCLOUD_PROJECT"
 echo "Region: $GCLOUD_REGION"
 echo "Bucket: $GCS_BUCKET"
 
-# Create a temporary directory for downloads
+# --- Data Download ---
 TEMP_DIR="temp_downloads"
 mkdir -p $TEMP_DIR
 cd $TEMP_DIR
-
-# --- JAR Download & Upload ---
-ICEBERG_JAR="iceberg-spark-runtime-3.1_2.12-1.2.1.jar"
-ICEBERG_JAR_URI="https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.1_2.12/1.2.1/$ICEBERG_JAR"
-ICEBERG_JAR_GCS_PATH="$GCS_BUCKET/jars/$ICEBERG_JAR"
-
-echo -e "\n${GREEN}Downloading Apache Iceberg JAR...${NC}"
-wget -q --show-progress "$ICEBERG_JAR_URI"
-
-echo -e "\n${GREEN}Uploading JAR to $ICEBERG_JAR_GCS_PATH...${NC}"
-gsutil cp "$ICEBERG_JAR" "$ICEBERG_JAR_GCS_PATH"
-
-# --- Data Download ---
-echo -e "\n${GREEN}Downloading NYC Taxi data (Jan, Feb, Mar 2023)...${NC}"
+echo -e "\n${GREEN}Downloading NYC Taxi data...${NC}"
 wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet
 wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-02.parquet
 wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-03.parquet
-
-echo -e "\n${GREEN}Downloading taxi zone lookup table...${NC}"
 wget -q --show-progress https://d37ci6vzurychx.cloudfront.net/misc/taxi+_zone_lookup.csv -O taxi_zone_lookup.csv
 
 # --- Data Upload to GCS ---
@@ -60,13 +45,17 @@ BATCH_ID="iceberg-init-$(date +%s)"
 CREATE_SCRIPT="$SCRIPT_DIR/create_iceberg_table.py"
 gsutil cp "$CREATE_SCRIPT" "$GCS_BUCKET/code/"
 
+# **CORRECTED:** Using --properties with spark.jars.packages
+ICEBERG_MAVEN_PACKAGE="org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2"
+
 gcloud dataproc batches submit pyspark \
     "$GCS_BUCKET/code/create_iceberg_table.py" \
     --batch="$BATCH_ID" \
     --project="$GCLOUD_PROJECT" \
     --region="$GCLOUD_REGION" \
     --subnet=default \
-    --jars="$ICEBERG_JAR_GCS_PATH" \
+    --version=2.2 \
+    --properties="spark.jars.packages=$ICEBERG_MAVEN_PACKAGE" \
     -- \
     --input_path="$GCS_BUCKET/data/raw/yellow_tripdata_2023-01.parquet" \
     --table_path="$GCS_BUCKET/warehouse/taxis"
