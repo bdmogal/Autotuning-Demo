@@ -26,7 +26,7 @@ def main():
 
     # Create the plot
     fig, axes = plt.subplots(2, 2, figsize=(16, 12), sharex=True)
-    fig.suptitle('Dataproc Autotuning Performance Over Time', fontsize=16)
+    fig.suptitle('Spark Autotuning Performance Over Time', fontsize=16)
     
     job_types = {
         "job_a_joins": axes[0, 0],

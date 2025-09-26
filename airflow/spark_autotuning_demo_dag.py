@@ -33,7 +33,7 @@ RUNTIME_CONFIG = {"version": DATAPROC_RUNTIME_VERSION}
 
 # [The get_job_metrics function from the previous step goes here. It is unchanged.]
 def get_job_metrics(**context):
-    """Fetches metrics for completed Dataproc jobs and appends to a log file."""
+    """Fetches metrics for completed Spark jobs and appends to a log file."""
     run_id = context["run_id"]
     ti = context["ti"]
     

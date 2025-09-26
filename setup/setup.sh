@@ -7,7 +7,7 @@ NC='\033[0m' # No Color
 # --- Robust Path Detection ---
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-echo -e "${GREEN}--- Dataproc Autotuning Demo Setup ---${NC}"
+echo -e "${GREEN}--- Spark Autotuning Demo Setup ---${NC}"
 
 # Prompt for user configuration
 read -p "Enter your GCP Project ID: " GCLOUD_PROJECT
@@ -40,7 +40,7 @@ gsutil cp *.parquet "$GCS_BUCKET/data/raw/"
 gsutil cp taxi_zone_lookup.csv "$GCS_BUCKET/data/raw/"
 
 # --- Initial Iceberg Table Creation ---
-echo -e "\n${GREEN}Submitting Dataproc job to create initial Iceberg table...${NC}"
+echo -e "\n${GREEN}Submitting Spark job to create initial Iceberg table...${NC}"
 BATCH_ID="iceberg-init-$(date +%s)"
 CREATE_SCRIPT="$SCRIPT_DIR/create_iceberg_table.py"
 gsutil cp "$CREATE_SCRIPT" "$GCS_BUCKET/code/"

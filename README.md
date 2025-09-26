@@ -24,14 +24,14 @@ The goal is to observe how autotuning intelligently adapts to different workload
 ## Demo Structure
 
 ```
-dataproc-autotuning-demo/
+Autotuning-Demo/
 ├── README.md
 ├── setup/
 │ ├── setup.sh
 │ ├── create_iceberg_table.py
 │ └── taxi_zone_lookup.csv
 ├── airflow/
-│ └── dataproc_autotuning_demo_dag.py
+│ └── spark_autotuning_demo_dag.py
 ├── spark_jobs/
 │ ├── simulate_data_change.py
 │ ├── job_a_joins.py
@@ -63,12 +63,12 @@ The setup script automates the initial data preparation.
 ### Step 2: Configure and Deploy the Airflow DAG
 
 1.  **Upload Python & SQL files to GCS:** The Airflow DAG needs access to the Spark job scripts. Upload the entire `spark_jobs` directory to a location in your GCS bucket (e.g., `gs://<your-bucket>/code/spark_jobs/`).
-2.  **Configure the DAG:** Open `airflow/dataproc_autotuning_demo_dag.py` and edit the `GCP_PROJECT_ID`, `GCP_REGION`, and `GCS_BUCKET` variables to match your environment.
-3.  **Deploy the DAG:** Upload the configured `dataproc_autotuning_demo_dag.py` file to your Airflow environment's DAGs folder.
+2.  **Configure the DAG:** Open `airflow/spark_autotuning_demo_dag.py` and edit the `GCP_PROJECT_ID`, `GCP_REGION`, and `GCS_BUCKET` variables to match your environment.
+3.  **Deploy the DAG:** Upload the configured `spark_autotuning_demo_dag.py` file to your Airflow environment's DAGs folder.
 
 ### Step 3: Run the Pipeline and Observe
 
-1.  In the Airflow UI, un-pause the `dataproc_autotuning_demo` DAG.
+1.  In the Airflow UI, un-pause the `spark_autotuning_demo` DAG.
 2.  Trigger the DAG manually for the first run. This simulates "Day 1".
 3.  Let the DAG run on its schedule (or trigger it manually) for 4-5 subsequent "days". Each run will first modify the dataset and then execute the four Spark jobs with autotuning enabled.
     *   **Run 1 (Day 1):** Establishes a baseline with January data.
