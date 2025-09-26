@@ -23,6 +23,7 @@ The goal is to observe how autotuning intelligently adapts to different workload
 
 ## Demo Structure
 
+```
 dataproc-autotuning-demo/
 ├── README.md
 ├── setup/
@@ -39,7 +40,7 @@ dataproc-autotuning-demo/
 │ └── job_d_memory.py
 └── visualization/
 └── generate_report.py
-
+```
 
 ## Step-by-Step Instructions
 
